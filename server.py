@@ -8,17 +8,23 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import shutil
 import sqlite3
 from functools import wraps
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024 * 1024  # 5GB max file size
-app.secret_key = 'your-secret-key-change-this'  # Change this to a random secret key
 
-# Configuration
+# Configuration - Updated for production
 UPLOAD_FOLDER = 'downloads'
 DATA_FOLDER = 'data'
-BASE_URL = 'http://localhost:5000'  # Change this to your server URL
+BASE_URL = os.getenv('BASE_URL', 'http://localhost:8000')  # Use environment variable
 ALLOWED_EXTENSIONS = {'zip'}
 DB_FILE = os.path.join(DATA_FOLDER, 'users.db')
+
+# Flask app configuration - Updated for production
+app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', 5 * 1024 * 1024 * 1024))  # 5GB default
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-key-change-in-production')  # Use environment variable
 
 # Ensure directories exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -706,7 +712,7 @@ def launcher_download():
                     <p>Download and install our official game launcher to get started with automatic updates and seamless gameplay experience!</p>
                     
                     <div class="download-section">
-                        <h2>📥 Download Launcher</h2>
+                        <h2>🔥 Download Launcher</h2>
                         
                         {% if launcher_version %}
                         <div class="version-info">
@@ -815,6 +821,7 @@ def launcher_download():
     '''
     
     return render_template_string(download_page_html, launcher_version=launcher_version)
+
 # API Routes
 @app.route('/api/version', methods=['GET'])
 def get_current_version():
@@ -1125,6 +1132,12 @@ def health_check():
         'version': '1.0.0'
     })
 
+# Simple health endpoint for Docker
+@app.route('/health')
+def health():
+    """Simple health check endpoint for Docker"""
+    return {'status': 'healthy'}, 200
+
 # Static file serving
 @app.route('/downloads/<filename>')
 def download_file(filename):
@@ -1406,7 +1419,7 @@ def admin_interface():
                 loading.style.display = 'none';
                 
                 if (versions.length === 0) {
-                    versionsDiv.innerHTML = '<p>📭 No game versions uploaded yet.</p>';
+                    versionsDiv.innerHTML = '<p>🔭 No game versions uploaded yet.</p>';
                     return;
                 }
                 
@@ -1436,7 +1449,7 @@ def admin_interface():
                 loading.style.display = 'none';
                 
                 if (versions.length === 0) {
-                    versionsDiv.innerHTML = '<p>📭 No launcher versions uploaded yet.</p>';
+                    versionsDiv.innerHTML = '<p>🔭 No launcher versions uploaded yet.</p>';
                     return;
                 }
                 
@@ -1550,13 +1563,18 @@ if __name__ == '__main__':
     # Initialize database on startup
     init_database()
     
-    print("🚀 Starting Game Update Server...")
-    print(f"🌐 Launcher Download: http://localhost:5000/")
-    print(f"📊 Admin Interface: http://localhost:5000/admin")
-    print(f"🔑 Default Login: admin/admin123")
-    print(f"🔗 API Endpoint: http://localhost:5000/api/version")
-    print(f"🚀 Launcher API: http://localhost:5000/api/launcher/version")
-    print(f"💾 Downloads folder: {os.path.abspath(UPLOAD_FOLDER)}")
-    print(f"📁 Data folder: {os.path.abspath(DATA_FOLDER)}")
+    # Get configuration from environment
+    debug_mode = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
+    port = int(os.getenv('PORT', 5000))
     
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    if debug_mode:
+        print("🚀 Starting Game Update Server...")
+        print(f"🌐 Launcher Download: http://localhost:{port}/")
+        print(f"📊 Admin Interface: http://localhost:{port}/admin")
+        print(f"🔑 Default Login: admin/admin123")
+        print(f"🔗 API Endpoint: http://localhost:{port}/api/version")
+        print(f"🚀 Launcher API: http://localhost:{port}/api/launcher/version")
+        print(f"💾 Downloads folder: {os.path.abspath(UPLOAD_FOLDER)}")
+        print(f"📁 Data folder: {os.path.abspath(DATA_FOLDER)}")
+    
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)
