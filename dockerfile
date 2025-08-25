@@ -15,9 +15,6 @@ RUN apt-get update \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-RUN groupadd -r appuser && useradd -r -g appuser appuser
-
 # Set work directory
 WORKDIR /app
 
@@ -30,12 +27,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY server.py .
 
-# Create necessary directories with proper permissions
-RUN mkdir -p downloads data \
-    && chown -R appuser:appuser /app
-
-# Switch to non-root user
-USER appuser
+# Create necessary directories (running as root, so no permission issues)
+RUN mkdir -p downloads data
 
 # Expose port (matching your Flask app's port 5000, but we'll map it to 8000 in Gunicorn)
 EXPOSE 8000
@@ -44,5 +37,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/api/health || exit 1
 
-# Run with Gunicorn, using server:app since your file is server.py
+# Run with Gunicorn as root, using server:app since your file is server.py
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "60", "--max-requests", "1000", "server:app"]
