@@ -1,0 +1,32 @@
+services:
+  game-update-server:
+    # Use the pre-built image from GitHub Container Registry
+    image: ghcr.io/nerdscorp/game-update-server:latest
+    container_name: game-update-server
+    
+    ports:
+      - "8000:8000"
+    
+    volumes:
+      # Persist uploads and data between container restarts
+      - ./data:/app/data
+    environment:
+      # Production environment variables
+      - FLASK_ENV=production
+      - FLASK_DEBUG=false
+      - BASE_URL=http://localhost:8000  # Change to your domain in production
+      
+      # IMPORTANT: Change this secret key in production!
+      - FLASK_SECRET_KEY=change-this-super-secret-key-in-production
+      
+      # Optional: Custom upload limit (5GB default)
+      # - MAX_CONTENT_LENGTH=5368709120
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
