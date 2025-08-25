@@ -17,7 +17,7 @@ A Flask-based game update server with launcher management, built for containeriz
 
 ```bash
 # Clone the repository
-git clone https://github.com/NerdsCorp/python-docker.git
+git clone https://github.com/game-update-server.git
 cd python-docker
 
 # Start the server
