@@ -3,7 +3,7 @@ name: Build and Publish Game Update Server Container
 on:
   # Run daily at midnight UTC
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 0 * * 0'
   
   # Allow manual trigger
   workflow_dispatch:
