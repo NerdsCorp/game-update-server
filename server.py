@@ -1194,8 +1194,44 @@ def admin_interface():
         .status.success { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
         .status.error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
         .loading { display: none; text-align: center; padding: 20px; }
-        .progress { width: 100%; height: 20px; background: #f0f0f0; border-radius: 10px; overflow: hidden; margin: 10px 0; }
-        .progress-bar { height: 100%; background: #007bff; width: 0%; transition: width 0.3s; }
+        .progress { 
+            width: 100%; 
+            height: 30px;
+            background: #f0f0f0; 
+            border-radius: 15px; 
+            overflow: hidden; 
+            margin: 10px 0; 
+            position: relative;
+            border: 1px solid #ddd;
+        }
+        .progress-bar { 
+            height: 100%; 
+            background: linear-gradient(90deg, #007bff, #0056b3);
+            width: 0%; 
+            transition: width 0.3s;
+            position: relative;
+            overflow: visible;
+        }
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #333;
+            font-weight: bold;
+            font-size: 14px;
+            z-index: 10;
+            text-shadow: 0 0 3px rgba(255,255,255,0.5);
+        }
+        .upload-stats {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+            display: none;
+        }
+        .upload-stats.active {
+            display: block;
+        }
         .tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid #e9ecef; }
         .tab { padding: 10px 20px; cursor: pointer; border-bottom: 2px solid transparent; margin-right: 10px; }
         .tab.active { border-bottom-color: #007bff; background: #f8f9fa; }
@@ -1251,6 +1287,12 @@ def admin_interface():
                     
                     <div class="progress" id="gameUploadProgress" style="display: none;">
                         <div class="progress-bar" id="gameProgressBar"></div>
+                        <div class="progress-text" id="gameProgressText">0%</div>
+                    </div>
+                    <div class="upload-stats" id="gameUploadStats">
+                        <span id="gameUploadedSize">0 MB</span> / <span id="gameTotalSize">0 MB</span> uploaded
+                        • <span id="gameUploadSpeed">0 MB/s</span>
+                        • <span id="gameTimeRemaining">calculating...</span> remaining
                     </div>
                 </form>
             </div>
@@ -1289,6 +1331,12 @@ def admin_interface():
                     
                     <div class="progress" id="launcherUploadProgress" style="display: none;">
                         <div class="progress-bar" id="launcherProgressBar"></div>
+                        <div class="progress-text" id="launcherProgressText">0%</div>
+                    </div>
+                    <div class="upload-stats" id="launcherUploadStats">
+                        <span id="launcherUploadedSize">0 MB</span> / <span id="launcherTotalSize">0 MB</span> uploaded
+                        • <span id="launcherUploadSpeed">0 MB/s</span>
+                        • <span id="launcherTimeRemaining">calculating...</span> remaining
                     </div>
                 </form>
             </div>
@@ -1349,60 +1397,196 @@ def admin_interface():
             const btnId = type === 'game' ? 'uploadGameBtn' : 'uploadLauncherBtn';
             const progressId = type === 'game' ? 'gameUploadProgress' : 'launcherUploadProgress';
             const progressBarId = type === 'game' ? 'gameProgressBar' : 'launcherProgressBar';
+            const progressTextId = type === 'game' ? 'gameProgressText' : 'launcherProgressText';
+            const uploadStatsId = type === 'game' ? 'gameUploadStats' : 'launcherUploadStats';
             
             const form = document.getElementById(formId);
             const uploadBtn = document.getElementById(btnId);
             const progressDiv = document.getElementById(progressId);
             const progressBar = document.getElementById(progressBarId);
+            const progressText = document.getElementById(progressTextId);
+            const uploadStats = document.getElementById(uploadStatsId);
             
             const formData = new FormData(form);
+            
+            // Get file size for display
+            const fileInput = type === 'game' ? document.getElementById('gameFile') : document.getElementById('launcherFile');
+            const file = fileInput.files[0];
+            const totalSize = file.size;
             
             uploadBtn.disabled = true;
             uploadBtn.textContent = 'Uploading...';
             progressDiv.style.display = 'block';
+            uploadStats.classList.add('active');
             
-            try {
-                const xhr = new XMLHttpRequest();
-                
-                // Track upload progress
-                xhr.upload.addEventListener('progress', (e) => {
-                    if (e.lengthComputable) {
-                        const percentComplete = (e.loaded / e.total) * 100;
-                        progressBar.style.width = percentComplete + '%';
+            // Upload tracking variables
+            let startTime = Date.now();
+            let lastLoaded = 0;
+            let lastTime = startTime;
+            
+            const xhr = new XMLHttpRequest();
+            
+            // Set timeout to prevent hanging (10 minutes for large files)
+            xhr.timeout = 600000;
+            
+            // Track upload progress
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const percentComplete = Math.round((e.loaded / e.total) * 100);
+                    const currentTime = Date.now();
+                    const elapsedTime = (currentTime - startTime) / 1000; // in seconds
+                    
+                    // Update progress bar
+                    progressBar.style.width = percentComplete + '%';
+                    progressText.textContent = percentComplete + '%';
+                    
+                    // Calculate upload speed (using recent speed, not average)
+                    const timeDelta = (currentTime - lastTime) / 1000;
+                    const bytesDelta = e.loaded - lastLoaded;
+                    let mbPerSecond = 0;
+                    
+                    if (timeDelta > 0) {
+                        mbPerSecond = ((bytesDelta / timeDelta) / (1024 * 1024)).toFixed(2);
+                    } else {
+                        // Fallback to average speed
+                        const bytesPerSecond = e.loaded / elapsedTime;
+                        mbPerSecond = (bytesPerSecond / (1024 * 1024)).toFixed(2);
                     }
-                });
-                
-                xhr.onload = function() {
-                    if (xhr.status === 200) {
+                    
+                    // Update last values for next calculation
+                    lastTime = currentTime;
+                    lastLoaded = e.loaded;
+                    
+                    // Calculate time remaining based on current speed
+                    const bytesRemaining = e.total - e.loaded;
+                    const bytesPerSec = mbPerSecond * 1024 * 1024;
+                    const secondsRemaining = bytesPerSec > 0 ? Math.round(bytesRemaining / bytesPerSec) : 0;
+                    const timeRemaining = formatTime(secondsRemaining);
+                    
+                    // Update stats display
+                    const prefix = type === 'game' ? 'game' : 'launcher';
+                    document.getElementById(prefix + 'UploadedSize').textContent = formatBytes(e.loaded);
+                    document.getElementById(prefix + 'TotalSize').textContent = formatBytes(e.total);
+                    document.getElementById(prefix + 'UploadSpeed').textContent = mbPerSecond + ' MB/s';
+                    document.getElementById(prefix + 'TimeRemaining').textContent = timeRemaining;
+                    
+                    // Change color as upload progresses
+                    if (percentComplete < 50) {
+                        progressBar.style.background = 'linear-gradient(90deg, #dc3545, #fd7e14)';
+                    } else if (percentComplete < 80) {
+                        progressBar.style.background = 'linear-gradient(90deg, #ffc107, #28a745)';
+                    } else {
+                        progressBar.style.background = 'linear-gradient(90deg, #28a745, #20c997)';
+                    }
+                    
+                    // Log progress to console for debugging
+                    console.log(`Upload progress: ${percentComplete}% (${formatBytes(e.loaded)} / ${formatBytes(e.total)})`);
+                }
+            });
+            
+            // Handle successful upload
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    try {
                         const response = JSON.parse(xhr.responseText);
+                        progressText.textContent = 'Complete!';
+                        progressBar.style.width = '100%';
+                        progressBar.style.background = 'linear-gradient(90deg, #28a745, #20c997)';
                         showStatus(`✅ ${type === 'game' ? 'Game' : 'Launcher'} version uploaded successfully!`, 'success');
                         form.reset();
-                        if (type === 'game') {
-                            loadGameVersions();
-                        } else {
-                            loadLauncherVersions();
-                        }
-                    } else {
+                        
+                        // Reload versions after a short delay
+                        setTimeout(() => {
+                            if (type === 'game') {
+                                loadGameVersions();
+                            } else {
+                                loadLauncherVersions();
+                            }
+                            // Reset upload UI only after success
+                            uploadBtn.disabled = false;
+                            uploadBtn.textContent = type === 'game' ? 'Upload Game' : 'Upload Launcher';
+                            progressDiv.style.display = 'none';
+                            uploadStats.classList.remove('active');
+                            progressBar.style.width = '0%';
+                            progressText.textContent = '0%';
+                        }, 2000);
+                    } catch (e) {
+                        showStatus('❌ Upload completed but response was invalid', 'error');
+                        console.error('Response parsing error:', e);
+                        resetUploadUI();
+                    }
+                } else {
+                    try {
                         const error = JSON.parse(xhr.responseText);
                         showStatus('❌ Upload failed: ' + error.error, 'error');
+                    } catch (e) {
+                        showStatus('❌ Upload failed with status: ' + xhr.status, 'error');
                     }
-                };
-                
-                xhr.onerror = function() {
-                    showStatus('❌ Upload failed: Network error', 'error');
-                };
-                
-                xhr.open('POST', '/api/upload');
-                xhr.send(formData);
-                
-            } catch (error) {
-                showStatus('❌ Upload failed: ' + error.message, 'error');
-            } finally {
-                uploadBtn.disabled = false;
-                uploadBtn.textContent = type === 'game' ? 'Upload Game' : 'Upload Launcher';
-                progressDiv.style.display = 'none';
-                progressBar.style.width = '0%';
+                    resetUploadUI();
+                }
+            };
+            
+            // Handle upload errors
+            xhr.onerror = function() {
+                console.error('Upload error occurred');
+                showStatus('❌ Upload failed: Network error or connection lost', 'error');
+                resetUploadUI();
+            };
+            
+            // Handle timeout
+            xhr.ontimeout = function() {
+                console.error('Upload timeout');
+                showStatus('❌ Upload failed: Request timed out', 'error');
+                resetUploadUI();
+            };
+            
+            // Handle abort
+            xhr.onabort = function() {
+                console.log('Upload aborted');
+                showStatus('⚠️ Upload cancelled', 'error');
+                resetUploadUI();
+            };
+            
+            // Reset UI function
+            function resetUploadUI() {
+                setTimeout(() => {
+                    uploadBtn.disabled = false;
+                    uploadBtn.textContent = type === 'game' ? 'Upload Game' : 'Upload Launcher';
+                    progressDiv.style.display = 'none';
+                    uploadStats.classList.remove('active');
+                    progressBar.style.width = '0%';
+                    progressText.textContent = '0%';
+                }, 1000);
             }
+            
+            // Start the upload
+            try {
+                xhr.open('POST', '/api/upload');
+                // Don't set Content-Type, let browser set it with boundary for multipart/form-data
+                xhr.send(formData);
+                console.log(`Starting upload of ${formatBytes(totalSize)} file`);
+            } catch (error) {
+                console.error('Failed to start upload:', error);
+                showStatus('❌ Failed to start upload: ' + error.message, 'error');
+                resetUploadUI();
+            }
+        }
+
+        // Helper function to format bytes
+        function formatBytes(bytes) {
+            if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+            if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+            if (bytes >= 1024) return (bytes / 1024).toFixed(2) + ' KB';
+            return bytes + ' B';
+        }
+
+        // Helper function to format time
+        function formatTime(seconds) {
+            if (seconds < 60) return seconds + ' seconds';
+            if (seconds < 3600) return Math.floor(seconds / 60) + ' min ' + (seconds % 60) + ' sec';
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            return hours + ' hr ' + minutes + ' min';
         }
 
         async function loadGameVersions() {
@@ -1578,5 +1762,6 @@ if __name__ == '__main__':
         print(f"📁 Data folder: {os.path.abspath(DATA_FOLDER)}")
     
     app.run(host='0.0.0.0', port=port, debug=debug_mode)
+
 
 
